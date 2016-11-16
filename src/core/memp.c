@@ -205,7 +205,7 @@ memp_overflow_check_all(void)
   SYS_ARCH_PROTECT(old_level);
 
   for (i = 0; i < MEMP_MAX; ++i) {
-    p = (struct memp *)(size_t)(memp_pools[i]->base);
+    p = (struct memp*)LWIP_MEM_ALIGN(memp_pools[i]->base);
     for (j = 0; j < memp_pools[i]->num; ++j) {
       memp_overflow_check_element_overflow(p, memp_pools[i]);
       memp_overflow_check_element_underflow(p, memp_pools[i]);
@@ -301,15 +301,15 @@ do_memp_malloc_pool_fn(const struct memp_desc *desc, const char* file, const int
   SYS_ARCH_PROTECT(old_level);
 
   memp = *desc->tab;
-
-#if MEMP_OVERFLOW_CHECK == 1
-  memp_overflow_check_element_overflow(memp, desc);
-  memp_overflow_check_element_underflow(memp, desc);
-#endif /* MEMP_OVERFLOW_CHECK */
 #endif /* MEMP_MEM_MALLOC */
 
   if (memp != NULL) {
 #if !MEMP_MEM_MALLOC
+#if MEMP_OVERFLOW_CHECK == 1
+    memp_overflow_check_element_overflow(memp, desc);
+    memp_overflow_check_element_underflow(memp, desc);
+#endif /* MEMP_OVERFLOW_CHECK */
+
     *desc->tab = memp->next;
 #if MEMP_OVERFLOW_CHECK
     memp->next = NULL;
@@ -470,6 +470,10 @@ memp_free(memp_t type, void *mem)
 #endif
 
   LWIP_ERROR("memp_free: type < MEMP_MAX", (type < MEMP_MAX), return;);
+
+  if (mem == NULL) {
+    return;
+  }
 
 #if MEMP_OVERFLOW_CHECK >= 2
   memp_overflow_check_all();

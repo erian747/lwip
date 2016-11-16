@@ -72,6 +72,7 @@
  */
 #define ARP_MAXPENDING 5
 
+/** ARP states */
 enum etharp_state {
   ETHARP_STATE_EMPTY = 0,
   ETHARP_STATE_PENDING,
@@ -239,7 +240,7 @@ etharp_tmr(void)
  * old entries. Heuristic choose the least important entry for recycling.
  *
  * @param ipaddr IP address to find in ARP cache, or to add if not found.
- * @param flags @see definition of ETHARP_FLAG_*
+ * @param flags See @ref etharp_state
  * @param netif netif related to this address (used for NETIF_HWADDRHINT)
  *
  * @return The ARP entry index that matched or is created, ERR_MEM if no
@@ -402,7 +403,7 @@ etharp_find_entry(const ip4_addr_t *ipaddr, u8_t flags, struct netif* netif)
  * @param netif netif related to this entry (used for NETIF_ADDRHINT)
  * @param ipaddr IP address of the inserted ARP entry.
  * @param ethaddr Ethernet address of the inserted ARP entry.
- * @param flags @see definition of ETHARP_FLAG_*
+ * @param flags See @ref etharp_state
  *
  * @return
  * - ERR_OK Successfully updated ARP cache.
@@ -490,7 +491,7 @@ etharp_update_arp_entry(struct netif *netif, const ip4_addr_t *ipaddr, struct et
  *
  * @param ipaddr IP address for the new static entry
  * @param ethaddr ethernet address for the new static entry
- * @return @see return values of etharp_add_static_entry
+ * @return See return values of etharp_add_static_entry
  */
 err_t
 etharp_add_static_entry(const ip4_addr_t *ipaddr, struct eth_addr *ethaddr)
@@ -626,8 +627,6 @@ etharp_get_entry(u8_t i, ip4_addr_t **ipaddr, struct netif **netif, struct eth_a
  * @param p The ARP packet that arrived on netif. Is freed by this function.
  * @param netif The lwIP network interface on which the ARP packet pbuf arrived.
  *
- * @return NULL
- *
  * @see pbuf_free()
  */
 void
@@ -701,7 +700,7 @@ etharp_input(struct pbuf *p, struct netif *netif)
       /* Re-use pbuf to send ARP reply.
          Since we are re-using an existing pbuf, we can't call etharp_raw since
          that would allocate a new pbuf. */
-      hdr->opcode = htons(ARP_REPLY);
+      hdr->opcode = lwip_htons(ARP_REPLY);
 
       IPADDR2_COPY(&hdr->dipaddr, &hdr->sipaddr);
       IPADDR2_COPY(&hdr->sipaddr, netif_ip4_addr(netif));
@@ -750,7 +749,7 @@ etharp_input(struct pbuf *p, struct netif *netif)
 #endif /* (LWIP_DHCP && DHCP_DOES_ARP_CHECK) */
     break;
   default:
-    LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE, ("etharp_input: ARP unknown opcode type %"S16_F"\n", htons(hdr->opcode)));
+    LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE, ("etharp_input: ARP unknown opcode type %"S16_F"\n", lwip_htons(hdr->opcode)));
     ETHARP_STATS_INC(etharp.err);
     break;
   }
@@ -875,6 +874,9 @@ etharp_output(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr)
       if (etharp_cached_entry < ARP_TABLE_SIZE) {
 #endif /* LWIP_NETIF_HWADDRHINT */
         if ((arp_table[etharp_cached_entry].state >= ETHARP_STATE_STABLE) &&
+#if ETHARP_TABLE_MATCH_NETIF
+            (arp_table[etharp_cached_entry].netif == netif) &&
+#endif
             (ip4_addr_cmp(dst_addr, &arp_table[etharp_cached_entry].ipaddr))) {
           /* the per-pcb-cached entry is stable and the right one! */
           ETHARP_STATS_INC(etharp.cachehit);
@@ -889,6 +891,9 @@ etharp_output(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr)
        throughput and etharp_find_entry() is kind of slow */
     for (i = 0; i < ARP_TABLE_SIZE; i++) {
       if ((arp_table[i].state >= ETHARP_STATE_STABLE) &&
+#if ETHARP_TABLE_MATCH_NETIF
+          (arp_table[i].netif == netif) &&
+#endif
           (ip4_addr_cmp(dst_addr, &arp_table[i].ipaddr))) {
         /* found an existing, stable entry */
         ETHARP_SET_HINT(netif, i);
@@ -1138,7 +1143,7 @@ etharp_raw(struct netif *netif, const struct eth_addr *ethsrc_addr,
 
   hdr = (struct etharp_hdr *)p->payload;
   LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE, ("etharp_raw: sending raw ARP packet.\n"));
-  hdr->opcode = htons(opcode);
+  hdr->opcode = lwip_htons(opcode);
 
   LWIP_ASSERT("netif->hwaddr_len must be the same as ETH_HWADDR_LEN for etharp!",
               (netif->hwaddr_len == ETH_HWADDR_LEN));

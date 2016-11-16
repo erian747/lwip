@@ -222,13 +222,12 @@ ip4_route(const ip4_addr_t *dest)
  * that may not be forwarded, or whether datagrams to that destination
  * may be forwarded.
  * @param p the packet to forward
- * @param dest the destination IP address
  * @return 1: can forward 0: discard
  */
 static int
 ip4_canforward(struct pbuf *p)
 {
-  u32_t addr = htonl(ip4_addr_get_u32(ip4_current_dest_addr()));
+  u32_t addr = lwip_htonl(ip4_addr_get_u32(ip4_current_dest_addr()));
 
   if (p->flags & PBUF_FLAG_LLBCAST) {
     /* don't route link-layer broadcasts */
@@ -405,7 +404,7 @@ ip4_input(struct pbuf *p, struct netif *inp)
   /* calculate IP header length in bytes */
   iphdr_hlen *= 4;
   /* obtain ip length in bytes */
-  iphdr_len = ntohs(IPH_LEN(iphdr));
+  iphdr_len = lwip_ntohs(IPH_LEN(iphdr));
 
   /* Trim pbuf. This is especially required for packets < 60 bytes. */
   if (iphdr_len < p->tot_len) {
@@ -545,7 +544,7 @@ ip4_input(struct pbuf *p, struct netif *inp)
     if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
       struct udp_hdr *udphdr = (struct udp_hdr *)((u8_t *)iphdr + iphdr_hlen);
       LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE, ("ip4_input: UDP packet to DHCP client port %"U16_F"\n",
-        ntohs(udphdr->dest)));
+        lwip_ntohs(udphdr->dest)));
       if (IP_ACCEPT_LINK_LAYER_ADDRESSED_PORT(udphdr->dest)) {
         LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE, ("ip4_input: DHCP packet accepted.\n"));
         netif = inp;
@@ -600,7 +599,7 @@ ip4_input(struct pbuf *p, struct netif *inp)
   if ((IPH_OFFSET(iphdr) & PP_HTONS(IP_OFFMASK | IP_MF)) != 0) {
 #if IP_REASSEMBLY /* packet fragment reassembly code present? */
     LWIP_DEBUGF(IP_DEBUG, ("IP packet is a fragment (id=0x%04"X16_F" tot_len=%"U16_F" len=%"U16_F" MF=%"U16_F" offset=%"U16_F"), calling ip4_reass()\n",
-      ntohs(IPH_ID(iphdr)), p->tot_len, ntohs(IPH_LEN(iphdr)), (u16_t)!!(IPH_OFFSET(iphdr) & PP_HTONS(IP_MF)), (u16_t)((ntohs(IPH_OFFSET(iphdr)) & IP_OFFMASK)*8)));
+      lwip_ntohs(IPH_ID(iphdr)), p->tot_len, lwip_ntohs(IPH_LEN(iphdr)), (u16_t)!!(IPH_OFFSET(iphdr) & PP_HTONS(IP_MF)), (u16_t)((lwip_ntohs(IPH_OFFSET(iphdr)) & IP_OFFMASK)*8)));
     /* reassemble the packet*/
     p = ip4_reass(p);
     /* packet not fully reassembled yet? */
@@ -611,7 +610,7 @@ ip4_input(struct pbuf *p, struct netif *inp)
 #else /* IP_REASSEMBLY == 0, no packet fragment reassembly code present */
     pbuf_free(p);
     LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS, ("IP packet dropped since it was fragmented (0x%"X16_F") (while IP_REASSEMBLY == 0).\n",
-      ntohs(IPH_OFFSET(iphdr))));
+      lwip_ntohs(IPH_OFFSET(iphdr))));
     IP_STATS_INC(ip.opterr);
     IP_STATS_INC(ip.drop);
     /* unsupported protocol feature */
@@ -724,7 +723,7 @@ ip4_input(struct pbuf *p, struct netif *inp)
  * @param p the packet to send (p->payload points to the data, e.g. next
             protocol header; if dest == LWIP_IP_HDRINCL, p already includes an
             IP header and p->payload points to that IP header)
- * @param src the source IP address to send from (if src == IP_ADDR_ANY, the
+ * @param src the source IP address to send from (if src == IP4_ADDR_ANY, the
  *         IP  address of the netif used to send is used as source address)
  * @param dest the destination IP address to send the packet to
  * @param ttl the TTL value to be set in the IP header
@@ -869,19 +868,19 @@ ip4_output_if_opt_src(struct pbuf *p, const ip4_addr_t *src, const ip4_addr_t *d
 #if CHECKSUM_GEN_IP_INLINE
     chk_sum += LWIP_MAKE_U16(tos, iphdr->_v_hl);
 #endif /* CHECKSUM_GEN_IP_INLINE */
-    IPH_LEN_SET(iphdr, htons(p->tot_len));
+    IPH_LEN_SET(iphdr, lwip_htons(p->tot_len));
 #if CHECKSUM_GEN_IP_INLINE
     chk_sum += iphdr->_len;
 #endif /* CHECKSUM_GEN_IP_INLINE */
     IPH_OFFSET_SET(iphdr, 0);
-    IPH_ID_SET(iphdr, htons(ip_id));
+    IPH_ID_SET(iphdr, lwip_htons(ip_id));
 #if CHECKSUM_GEN_IP_INLINE
     chk_sum += iphdr->_id;
 #endif /* CHECKSUM_GEN_IP_INLINE */
     ++ip_id;
 
     if (src == NULL) {
-      ip4_addr_copy(iphdr->src, *IP4_ADDR_ANY);
+      ip4_addr_copy(iphdr->src, *IP4_ADDR_ANY4);
     } else {
       /* src cannot be NULL here */
       ip4_addr_copy(iphdr->src, *src);
@@ -955,7 +954,7 @@ ip4_output_if_opt_src(struct pbuf *p, const ip4_addr_t *src, const ip4_addr_t *d
  * @param p the packet to send (p->payload points to the data, e.g. next
             protocol header; if dest == LWIP_IP_HDRINCL, p already includes an
             IP header and p->payload points to that IP header)
- * @param src the source IP address to send from (if src == IP_ADDR_ANY, the
+ * @param src the source IP address to send from (if src == IP4_ADDR_ANY, the
  *         IP  address of the netif used to send is used as source address)
  * @param dest the destination IP address to send the packet to
  * @param ttl the TTL value to be set in the IP header
@@ -990,7 +989,7 @@ ip4_output(struct pbuf *p, const ip4_addr_t *src, const ip4_addr_t *dest,
  * @param p the packet to send (p->payload points to the data, e.g. next
             protocol header; if dest == LWIP_IP_HDRINCL, p already includes an
             IP header and p->payload points to that IP header)
- * @param src the source IP address to send from (if src == IP_ADDR_ANY, the
+ * @param src the source IP address to send from (if src == IP4_ADDR_ANY, the
  *         IP  address of the netif used to send is used as source address)
  * @param dest the destination IP address to send the packet to
  * @param ttl the TTL value to be set in the IP header
@@ -1041,19 +1040,19 @@ ip4_debug_print(struct pbuf *p)
                     (u16_t)IPH_V(iphdr),
                     (u16_t)IPH_HL(iphdr),
                     (u16_t)IPH_TOS(iphdr),
-                    ntohs(IPH_LEN(iphdr))));
+                    lwip_ntohs(IPH_LEN(iphdr))));
   LWIP_DEBUGF(IP_DEBUG, ("+-------------------------------+\n"));
   LWIP_DEBUGF(IP_DEBUG, ("|    %5"U16_F"      |%"U16_F"%"U16_F"%"U16_F"|    %4"U16_F"   | (id, flags, offset)\n",
-                    ntohs(IPH_ID(iphdr)),
-                    (u16_t)(ntohs(IPH_OFFSET(iphdr)) >> 15 & 1),
-                    (u16_t)(ntohs(IPH_OFFSET(iphdr)) >> 14 & 1),
-                    (u16_t)(ntohs(IPH_OFFSET(iphdr)) >> 13 & 1),
-                    (u16_t)(ntohs(IPH_OFFSET(iphdr)) & IP_OFFMASK)));
+                    lwip_ntohs(IPH_ID(iphdr)),
+                    (u16_t)(lwip_ntohs(IPH_OFFSET(iphdr)) >> 15 & 1),
+                    (u16_t)(lwip_ntohs(IPH_OFFSET(iphdr)) >> 14 & 1),
+                    (u16_t)(lwip_ntohs(IPH_OFFSET(iphdr)) >> 13 & 1),
+                    (u16_t)(lwip_ntohs(IPH_OFFSET(iphdr)) & IP_OFFMASK)));
   LWIP_DEBUGF(IP_DEBUG, ("+-------------------------------+\n"));
   LWIP_DEBUGF(IP_DEBUG, ("|  %3"U16_F"  |  %3"U16_F"  |    0x%04"X16_F"     | (ttl, proto, chksum)\n",
                     (u16_t)IPH_TTL(iphdr),
                     (u16_t)IPH_PROTO(iphdr),
-                    ntohs(IPH_CHKSUM(iphdr))));
+                    lwip_ntohs(IPH_CHKSUM(iphdr))));
   LWIP_DEBUGF(IP_DEBUG, ("+-------------------------------+\n"));
   LWIP_DEBUGF(IP_DEBUG, ("|  %3"U16_F"  |  %3"U16_F"  |  %3"U16_F"  |  %3"U16_F"  | (src)\n",
                     ip4_addr1_16(&iphdr->src),

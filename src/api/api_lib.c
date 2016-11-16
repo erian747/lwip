@@ -3,7 +3,7 @@
  * Sequential API External module
  * 
  * @defgroup netconn Netconn API
- * @ingroup threadsafe_api
+ * @ingroup sequential_api
  * Thread-safe, to be called from non-TCPIP threads only.
  * TX/RX handling based on @ref netbuf (containing @ref pbuf)
  * to avoid copying data around.
@@ -241,8 +241,8 @@ netconn_getaddr(struct netconn *conn, ip_addr_t *addr, u16_t *port, u8_t local)
  * Binding one netconn twice might not always be checked correctly!
  *
  * @param conn the netconn to bind
- * @param addr the local IP address to bind the netconn to (use IP_ADDR_ANY
- *             to bind to all addresses)
+ * @param addr the local IP address to bind the netconn to 
+ *             (use IP4_ADDR_ANY/IP6_ADDR_ANY to bind to all addresses)
  * @param port the local port to bind the netconn to (not used for RAW)
  * @return ERR_OK if bound, any other err_t on failure
  */
@@ -256,7 +256,7 @@ netconn_bind(struct netconn *conn, const ip_addr_t *addr, u16_t port)
 
   /* Don't propagate NULL pointer (IP_ADDR_ANY alias) to subsequent functions */
   if (addr == NULL) {
-    addr = IP_ADDR_ANY;
+    addr = IP4_ADDR_ANY;
   }
 
   API_MSG_VAR_ALLOC(msg);
@@ -288,7 +288,7 @@ netconn_connect(struct netconn *conn, const ip_addr_t *addr, u16_t port)
 
   /* Don't propagate NULL pointer (IP_ADDR_ANY alias) to subsequent functions */
   if (addr == NULL) {
-    addr = IP_ADDR_ANY;
+    addr = IP4_ADDR_ANY;
   }
 
   API_MSG_VAR_ALLOC(msg);
@@ -306,7 +306,7 @@ netconn_connect(struct netconn *conn, const ip_addr_t *addr, u16_t port)
  * Disconnect a netconn from its current peer (only valid for UDP netconns).
  *
  * @param conn the netconn to disconnect
- * @return @todo: return value is not set here...
+ * @return See @ref err_t
  */
 err_t
 netconn_disconnect(struct netconn *conn)
@@ -544,6 +544,10 @@ netconn_recv_data(struct netconn *conn, void **new_buf)
     /* If we are closed, we indicate that we no longer wish to use the socket */
     if (buf == NULL) {
       API_EVENT(conn, NETCONN_EVT_RCVMINUS, 0);
+      if (conn->pcb.ip == NULL) {
+        /* race condition: RST during recv */
+        return conn->last_err == ERR_OK ? ERR_RST : conn->last_err;
+      }
       /* RX side is closed, so deallocate the recvmbox */
       netconn_close_shutdown(conn, NETCONN_SHUT_RD);
       /* Don' store ERR_CLSD as conn->err since we are only half-closed */
@@ -867,10 +871,10 @@ netconn_join_leave_group(struct netconn *conn,
 
   /* Don't propagate NULL pointer (IP_ADDR_ANY alias) to subsequent functions */
   if (multiaddr == NULL) {
-    multiaddr = IP_ADDR_ANY;
+    multiaddr = IP4_ADDR_ANY;
   }
   if (netif_addr == NULL) {
-    netif_addr = IP_ADDR_ANY;
+    netif_addr = IP4_ADDR_ANY;
   }
 
   API_MSG_VAR_REF(msg).conn = conn;

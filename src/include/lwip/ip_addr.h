@@ -47,14 +47,18 @@
 extern "C" {
 #endif
 
-/** Value for ip_addr_t.type: IPv4 */
-#define IPADDR_TYPE_V4                0U
-/** Value for ip_addr_t.type: IPv6 */
-#define IPADDR_TYPE_V6                6U
-/** Value for ip_addr_t.type: IPv4+IPv6 ("dual-stack")
+/** @ingroup ipaddr
+ * IP address types for use in ip_addr_t.type member.
  * @see tcp_new_ip_type(), udp_new_ip_type(), raw_new_ip_type().
  */
-#define IPADDR_TYPE_ANY               46U
+enum lwip_ip_addr_type {
+  /** IPv4 */
+  IPADDR_TYPE_V4 =   0U,
+  /** IPv6 */
+  IPADDR_TYPE_V6 =   6U,
+  /** IPv4+IPv6 ("dual-stack") */
+  IPADDR_TYPE_ANY = 46U
+};
 
 #if LWIP_IPV4 && LWIP_IPV6
 /**
@@ -67,6 +71,7 @@ typedef struct _ip_addr {
     ip6_addr_t ip6;
     ip4_addr_t ip4;
   } u_addr;
+  /** @ref lwip_ip_addr_type */
   u8_t type;
 } ip_addr_t;
 
@@ -308,19 +313,25 @@ extern const ip_addr_t ip_addr_any;
 extern const ip_addr_t ip_addr_broadcast;
 
 /**
- * @ingroup ipaddr
- * IP_ADDR_ can be used as a fixed/const ip_addr_t
- * for the IPv4 wildcard and the broadcast address
+ * @ingroup ip4addr
+ * Provided for compatibility. Use IP4_ADDR_ANY for better readability.
  */
-#define IP_ADDR_ANY         (&ip_addr_any)
-/** @ingroup ipaddr */
-#define IP_ADDR_BROADCAST   (&ip_addr_broadcast)
+#define IP_ADDR_ANY         IP4_ADDR_ANY
 /**
  * @ingroup ip4addr
- * IP4_ADDR_ can be used as a fixed/const ip4_addr_t
+ * Can be used as a fixed/const ip_addr_t
+ * for the IPv4 wildcard and the broadcast address
+ */
+#define IP4_ADDR_ANY        (&ip_addr_any)
+/**
+ * @ingroup ip4addr
+ * Can be used as a fixed/const ip4_addr_t
  * for the wildcard and the broadcast address
  */
-#define IP4_ADDR_ANY        (ip_2_ip4(&ip_addr_any))
+#define IP4_ADDR_ANY4       (ip_2_ip4(&ip_addr_any))
+
+/** @ingroup ip4addr */
+#define IP_ADDR_BROADCAST   (&ip_addr_broadcast)
 /** @ingroup ip4addr */
 #define IP4_ADDR_BROADCAST  (ip_2_ip4(&ip_addr_broadcast))
 

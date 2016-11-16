@@ -58,8 +58,6 @@ extern "C" {
 struct mld_group {
   /** next link */
   struct mld_group *next;
-  /** interface on which the group is active */
-  struct netif      *netif;
   /** multicast address */
   ip6_addr_t         group_address;
   /** signifies we were the last person to report */
@@ -83,6 +81,14 @@ err_t  mld6_joingroup(const ip6_addr_t *srcaddr, const ip6_addr_t *groupaddr);
 err_t  mld6_joingroup_netif(struct netif *netif, const ip6_addr_t *groupaddr);
 err_t  mld6_leavegroup(const ip6_addr_t *srcaddr, const ip6_addr_t *groupaddr);
 err_t  mld6_leavegroup_netif(struct netif *netif, const ip6_addr_t *groupaddr);
+
+/** @ingroup mld6
+ * Get list head of MLD6 groups for netif.
+ * Note: The allnodes group IP is NOT in the list, since it must always 
+ * be received for correct IPv6 operation.
+ * @see @ref netif_set_mld_mac_filter()
+ */
+#define netif_mld6_data(netif) ((struct mld_group *)netif_get_client_data(netif, LWIP_NETIF_CLIENT_DATA_INDEX_MLD6))
 
 #ifdef __cplusplus
 }

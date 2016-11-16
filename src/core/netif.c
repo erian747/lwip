@@ -58,6 +58,7 @@
 #include "lwip/netif.h"
 #include "lwip/priv/tcp_priv.h"
 #include "lwip/udp.h"
+#include "lwip/raw.h"
 #include "lwip/snmp.h"
 #include "lwip/igmp.h"
 #include "lwip/etharp.h"
@@ -227,8 +228,13 @@ netif_input(struct pbuf *p, struct netif *inp)
  * These functions use netif flags NETIF_FLAG_ETHARP and NETIF_FLAG_ETHERNET
  * to decide whether to forward to ethernet_input() or ip_input().
  * In other words, the functions only work when the netif
- * driver is implemented correctly!
- *
+ * driver is implemented correctly!\n
+ * Most members of struct netif should be be initialized by the 
+ * netif init function = netif driver (init parameter of this function).\n
+ * IPv6: Don't forget to call netif_create_ip6_linklocal_address() after
+ * setting the MAC address in struct netif.hwaddr
+ * (IPv6 requires a link-local address).
+ * 
  * @return netif, or NULL if failed.
  */
 struct netif *
@@ -253,13 +259,13 @@ netif_add(struct netif *netif,
 #if LWIP_IPV6
   for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
     ip_addr_set_zero_ip6(&netif->ip6_addr[i]);
-    netif->ip6_addr_state[0] = IP6_ADDR_INVALID;
+    netif->ip6_addr_state[i] = IP6_ADDR_INVALID;
   }
   netif->output_ip6 = netif_null_output_ip6;
 #endif /* LWIP_IPV6 */
   NETIF_SET_CHECKSUM_CTRL(netif, NETIF_CHECKSUM_ENABLE_ALL);
   netif->flags = 0;
-#if LWIP_DHCP || LWIP_AUTOIP || (LWIP_NUM_NETIF_CLIENT_DATA > 0)
+#ifdef netif_get_client_data
   memset(netif->client_data, 0, sizeof(netif->client_data));
 #endif /* LWIP_NUM_NETIF_CLIENT_DATA */
 #if LWIP_IPV6_AUTOCONFIG
@@ -386,6 +392,9 @@ netif_remove(struct netif *netif)
 #if LWIP_UDP
     udp_netif_ip_addr_changed(netif_ip_addr4(netif), NULL);
 #endif /* LWIP_UDP */
+#if LWIP_RAW
+    raw_netif_ip_addr_changed(netif_ip_addr4(netif), NULL);
+#endif /* LWIP_RAW */
   }
 
 #if LWIP_IGMP
@@ -405,6 +414,9 @@ netif_remove(struct netif *netif)
 #if LWIP_UDP
       udp_netif_ip_addr_changed(netif_ip_addr6(netif, i), NULL);
 #endif /* LWIP_UDP */
+#if LWIP_RAW
+    raw_netif_ip_addr_changed(netif_ip_addr6(netif, i), NULL);
+#endif /* LWIP_RAW */
     }
   }
 #if LWIP_IPV6_MLD
@@ -495,7 +507,7 @@ void
 netif_set_ipaddr(struct netif *netif, const ip4_addr_t *ipaddr)
 {
   ip_addr_t new_addr;
-  *ip_2_ip4(&new_addr) = (ipaddr ? *ipaddr : *IP4_ADDR_ANY);
+  *ip_2_ip4(&new_addr) = (ipaddr ? *ipaddr : *IP4_ADDR_ANY4);
   IP_SET_TYPE_VAL(new_addr, IPADDR_TYPE_V4);
 
   /* address is actually being changed? */
@@ -507,6 +519,9 @@ netif_set_ipaddr(struct netif *netif, const ip4_addr_t *ipaddr)
 #if LWIP_UDP
     udp_netif_ip_addr_changed(netif_ip_addr4(netif), &new_addr);
 #endif /* LWIP_UDP */
+#if LWIP_RAW
+    raw_netif_ip_addr_changed(netif_ip_addr4(netif), &new_addr);
+#endif /* LWIP_RAW */
 
     mib2_remove_ip4(netif);
     mib2_remove_route_ip4(0, netif);
@@ -786,7 +801,7 @@ netif_loop_output(struct netif *netif, struct pbuf *p)
   err_t err;
   struct pbuf *last;
 #if LWIP_LOOPBACK_MAX_PBUFS
-  u8_t clen = 0;
+  u16_t clen = 0;
 #endif /* LWIP_LOOPBACK_MAX_PBUFS */
   /* If we have a loopif, SNMP counters are adjusted for it,
    * if not they are adjusted for 'netif'. */
@@ -1042,6 +1057,9 @@ netif_ip6_addr_set_parts(struct netif *netif, s8_t addr_idx, u32_t i0, u32_t i1,
 #if LWIP_UDP
       udp_netif_ip_addr_changed(netif_ip_addr6(netif, addr_idx), &new_ipaddr);
 #endif /* LWIP_UDP */
+#if LWIP_RAW
+    raw_netif_ip_addr_changed(netif_ip_addr6(netif, addr_idx), &new_ipaddr);
+#endif /* LWIP_RAW */
     }
     /* @todo: remove/readd mib2 ip6 entries? */
 
@@ -1091,6 +1109,9 @@ netif_ip6_addr_set_state(struct netif* netif, s8_t addr_idx, u8_t state)
 #if LWIP_UDP
       udp_netif_ip_addr_changed(netif_ip_addr6(netif, addr_idx), NULL);
 #endif /* LWIP_UDP */
+#if LWIP_RAW
+    raw_netif_ip_addr_changed(netif_ip_addr6(netif, addr_idx), NULL);
+#endif /* LWIP_RAW */
       /* @todo: remove mib2 ip6 entries? */
     }
     netif->ip6_addr_state[addr_idx] = state;
@@ -1154,11 +1175,11 @@ netif_create_ip6_linklocal_address(struct netif *netif, u8_t from_mac_48bit)
   /* Generate interface ID. */
   if (from_mac_48bit) {
     /* Assume hwaddr is a 48-bit IEEE 802 MAC. Convert to EUI-64 address. Complement Group bit. */
-    ip_2_ip6(&netif->ip6_addr[0])->addr[2] = htonl((((u32_t)(netif->hwaddr[0] ^ 0x02)) << 24) |
+    ip_2_ip6(&netif->ip6_addr[0])->addr[2] = lwip_htonl((((u32_t)(netif->hwaddr[0] ^ 0x02)) << 24) |
         ((u32_t)(netif->hwaddr[1]) << 16) |
         ((u32_t)(netif->hwaddr[2]) << 8) |
         (0xff));
-    ip_2_ip6(&netif->ip6_addr[0])->addr[3] = htonl((0xfeul << 24) |
+    ip_2_ip6(&netif->ip6_addr[0])->addr[3] = lwip_htonl((0xfeul << 24) |
         ((u32_t)(netif->hwaddr[3]) << 16) |
         ((u32_t)(netif->hwaddr[4]) << 8) |
         (netif->hwaddr[5]));
