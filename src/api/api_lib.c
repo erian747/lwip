@@ -254,10 +254,22 @@ netconn_bind(struct netconn *conn, const ip_addr_t *addr, u16_t port)
   
   LWIP_ERROR("netconn_bind: invalid conn", (conn != NULL), return ERR_ARG;);
 
+#if LWIP_IPV4
   /* Don't propagate NULL pointer (IP_ADDR_ANY alias) to subsequent functions */
   if (addr == NULL) {
     addr = IP4_ADDR_ANY;
   }
+#endif /* LWIP_IPV4 */
+  
+#if LWIP_IPV4 && LWIP_IPV6
+  /* "Socket API like" dual-stack support: If IP to bind to is IP6_ADDR_ANY,
+   * and NETCONN_FLAG_IPV6_V6ONLY is 0, use IP_ANY_TYPE to bind
+   */
+  if ((netconn_get_ipv6only(conn) == 0) &&
+     ip_addr_cmp(addr, IP6_ADDR_ANY)) {
+    addr = IP_ANY_TYPE;
+  }
+#endif /* LWIP_IPV4 && LWIP_IPV6 */
 
   API_MSG_VAR_ALLOC(msg);
   API_MSG_VAR_REF(msg).conn = conn;
@@ -286,10 +298,12 @@ netconn_connect(struct netconn *conn, const ip_addr_t *addr, u16_t port)
 
   LWIP_ERROR("netconn_connect: invalid conn", (conn != NULL), return ERR_ARG;);
 
+#if LWIP_IPV4
   /* Don't propagate NULL pointer (IP_ADDR_ANY alias) to subsequent functions */
   if (addr == NULL) {
     addr = IP4_ADDR_ANY;
   }
+#endif /* LWIP_IPV4 */
 
   API_MSG_VAR_ALLOC(msg);
   API_MSG_VAR_REF(msg).conn = conn;
@@ -562,7 +576,7 @@ netconn_recv_data(struct netconn *conn, void **new_buf)
 #if (LWIP_UDP || LWIP_RAW)
   {
     LWIP_ASSERT("buf != NULL", buf != NULL);
-    len = netbuf_len((struct netbuf *)buf);
+    len = netbuf_len((struct netbuf*)buf);
   }
 #endif /* (LWIP_UDP || LWIP_RAW) */
 
@@ -697,6 +711,7 @@ netconn_send(struct netconn *conn, struct netbuf *buf)
   LWIP_ERROR("netconn_send: invalid conn",  (conn != NULL), return ERR_ARG;);
 
   LWIP_DEBUGF(API_LIB_DEBUG, ("netconn_send: sending %"U16_F" bytes\n", buf->p->tot_len));
+
   API_MSG_VAR_ALLOC(msg);
   API_MSG_VAR_REF(msg).conn = conn;
   API_MSG_VAR_REF(msg).msg.b = buf;
@@ -734,6 +749,11 @@ netconn_write_partly(struct netconn *conn, const void *dataptr, size_t size,
     return ERR_OK;
   }
   dontblock = netconn_is_nonblocking(conn) || (apiflags & NETCONN_DONTBLOCK);
+#if LWIP_SO_SNDTIMEO
+  if (conn->send_timeout != 0) {
+    dontblock = 1;
+  }
+#endif /* LWIP_SO_SNDTIMEO */
   if (dontblock && !bytes_written) {
     /* This implies netconn_write() cannot be used for non-blocking send, since
        it has no way to return the number of bytes written. */
@@ -761,11 +781,7 @@ netconn_write_partly(struct netconn *conn, const void *dataptr, size_t size,
      non-blocking version here. */
   err = netconn_apimsg(lwip_netconn_do_write, &API_MSG_VAR_REF(msg));
   if ((err == ERR_OK) && (bytes_written != NULL)) {
-    if (dontblock
-#if LWIP_SO_SNDTIMEO
-        || (conn->send_timeout != 0)
-#endif /* LWIP_SO_SNDTIMEO */
-       ) {
+    if (dontblock) {
       /* nonblocking write: maybe the data has been sent partly */
       *bytes_written = API_MSG_VAR_REF(msg).msg.w.len;
     } else {
@@ -869,6 +885,7 @@ netconn_join_leave_group(struct netconn *conn,
 
   API_MSG_VAR_ALLOC(msg);
 
+#if LWIP_IPV4
   /* Don't propagate NULL pointer (IP_ADDR_ANY alias) to subsequent functions */
   if (multiaddr == NULL) {
     multiaddr = IP4_ADDR_ANY;
@@ -876,6 +893,7 @@ netconn_join_leave_group(struct netconn *conn,
   if (netif_addr == NULL) {
     netif_addr = IP4_ADDR_ANY;
   }
+#endif /* LWIP_IPV4 */
 
   API_MSG_VAR_REF(msg).conn = conn;
   API_MSG_VAR_REF(msg).msg.jl.multiaddr = API_MSG_VAR_REF(multiaddr);

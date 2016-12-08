@@ -116,6 +116,13 @@ static u16_t dns_txid;
 #error DNS_MAX_TTL must be a positive 32-bit value
 #endif
 
+#if DNS_TABLE_SIZE > 255
+#error DNS_TABLE_SIZE must fit into an u8_t
+#endif
+#if DNS_MAX_SERVERS > 255
+#error DNS_MAX_SERVERS must fit into an u8_t
+#endif
+
 /* The number of parallel requests (i.e. calls to dns_gethostbyname
  * that cannot be answered from the DNS table.
  * This is set to the table size by default.
@@ -123,6 +130,10 @@ static u16_t dns_txid;
 #if ((LWIP_DNS_SECURE & LWIP_DNS_SECURE_NO_MULTIPLE_OUTSTANDING) != 0)
 #ifndef DNS_MAX_REQUESTS
 #define DNS_MAX_REQUESTS          DNS_TABLE_SIZE
+#else
+#if DNS_MAX_REQUESTS > 255
+#error DNS_MAX_REQUESTS must fit into an u8_t
+#endif
 #endif
 #else
 /* In this configuration, both arrays have to have the same size and are used
@@ -134,6 +145,10 @@ static u16_t dns_txid;
 #if ((LWIP_DNS_SECURE & LWIP_DNS_SECURE_RAND_SRC_PORT) != 0)
 #ifndef DNS_MAX_SOURCE_PORTS
 #define DNS_MAX_SOURCE_PORTS      DNS_MAX_REQUESTS
+#else
+#if DNS_MAX_SOURCE_PORTS > 255
+#error DNS_MAX_SOURCE_PORTS must fit into an u8_t
+#endif
 #endif
 #else
 #ifdef DNS_MAX_SOURCE_PORTS
@@ -329,7 +344,7 @@ dns_setserver(u8_t numdns, const ip_addr_t *dnsserver)
     if (dnsserver != NULL) {
       dns_servers[numdns] = (*dnsserver);
     } else {
-      dns_servers[numdns] = *IP4_ADDR_ANY;
+      dns_servers[numdns] = *IP_ADDR_ANY;
     }
   }
 }
@@ -348,7 +363,7 @@ dns_getserver(u8_t numdns)
   if (numdns < DNS_MAX_SERVERS) {
     return &dns_servers[numdns];
   } else {
-    return IP4_ADDR_ANY;
+    return IP_ADDR_ANY;
   }
 }
 
@@ -1244,8 +1259,9 @@ dns_enqueue(const char *name, size_t hostnamelen, dns_found_callback found,
     }
     /* check if this is the oldest completed entry */
     if (entry->state == DNS_STATE_DONE) {
-      if ((u8_t)(dns_seqno - entry->seqno) > lseq) {
-        lseq = dns_seqno - entry->seqno;
+      u8_t age = dns_seqno - entry->seqno;
+      if (age > lseq) {
+        lseq = age;
         lseqi = i;
       }
     }

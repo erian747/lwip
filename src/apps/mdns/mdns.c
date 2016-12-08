@@ -65,7 +65,6 @@
 #include "lwip/prot/dns.h"
 
 #include <string.h>
-#include <stdlib.h>
 
 #if LWIP_MDNS_RESPONDER
 
@@ -570,7 +569,7 @@ mdns_build_dnssd_domain(struct mdns_domain *domain)
   LWIP_ERROR("mdns_build_dnssd_domain: Failed to add label", (res == ERR_OK), return res);
   res = mdns_domain_add_label(domain, "_dns-sd", (u8_t)(sizeof("_dns-sd")-1));
   LWIP_ERROR("mdns_build_dnssd_domain: Failed to add label", (res == ERR_OK), return res);
-  res = mdns_domain_add_label(domain, dnssd_protos[DNSSD_PROTO_UDP], (u8_t)(sizeof(dnssd_protos[DNSSD_PROTO_UDP])-1));
+  res = mdns_domain_add_label(domain, dnssd_protos[DNSSD_PROTO_UDP], (u8_t)strlen(dnssd_protos[DNSSD_PROTO_UDP]));
   LWIP_ERROR("mdns_build_dnssd_domain: Failed to add label", (res == ERR_OK), return res);
   return mdns_add_dotlocal(domain);
 }
@@ -595,7 +594,7 @@ mdns_build_service_domain(struct mdns_domain *domain, struct mdns_service *servi
   }
   res = mdns_domain_add_label(domain, service->service, (u8_t)strlen(service->service));
   LWIP_ERROR("mdns_build_service_domain: Failed to add label", (res == ERR_OK), return res);
-  res = mdns_domain_add_label(domain, dnssd_protos[service->proto], (u8_t)(sizeof(dnssd_protos[DNSSD_PROTO_UDP])-1));
+  res = mdns_domain_add_label(domain, dnssd_protos[service->proto], (u8_t)strlen(dnssd_protos[service->proto]));
   LWIP_ERROR("mdns_build_service_domain: Failed to add label", (res == ERR_OK), return res);
   return mdns_add_dotlocal(domain);
 }
@@ -2019,7 +2018,7 @@ mdns_resp_add_service(struct netif *netif, const char *name, const char *service
 err_t
 mdns_resp_add_service_txtitem(struct mdns_service *service, const char *txt, u8_t txt_len)
 {
-  LWIP_ASSERT("mdns_resp_add_service: service != NULL", service);
+  LWIP_ASSERT("mdns_resp_add_service_txtitem: service != NULL", service);
 
   /* Use a mdns_domain struct to store txt chunks since it is the same encoding */
   return mdns_domain_add_label(&service->txtdata, txt, txt_len);

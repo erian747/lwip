@@ -494,10 +494,8 @@ lwiperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
         return ERR_VAL;
       }
     }
-    packet_idx += i;
-#else
-    packet_idx += q->len;
 #endif
+    packet_idx += q->len;
   }
   LWIP_ASSERT("count mismatch", packet_idx == p->tot_len);
   conn->bytes_transferred += packet_idx;
@@ -579,7 +577,7 @@ lwiperf_tcp_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
 void*
 lwiperf_start_tcp_server_default(lwiperf_report_fn report_fn, void* report_arg)
 {
-  return lwiperf_start_tcp_server(IP4_ADDR_ANY, LWIPERF_TCP_PORT_DEFAULT,
+  return lwiperf_start_tcp_server(IP_ADDR_ANY, LWIPERF_TCP_PORT_DEFAULT,
     report_fn, report_arg);
 }
 

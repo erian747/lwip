@@ -116,24 +116,6 @@ again:
     }
   }
   return udp_port;
-#if 0
-  struct udp_pcb *ipcb = udp_pcbs;
-  while ((ipcb != NULL) && (udp_port != UDP_LOCAL_PORT_RANGE_END)) {
-    if (ipcb->local_port == udp_port) {
-      /* port is already used by another udp_pcb */
-      udp_port++;
-      /* restart scanning all udp pcbs */
-      ipcb = udp_pcbs;
-    } else {
-      /* go on with next udp pcb */
-      ipcb = ipcb->next;
-    }
-  }
-  if (ipcb != NULL) {
-    return 0;
-  }
-  return udp_port;
-#endif
 }
 
 /** Common code to see if the current input packet matches the pcb
@@ -178,15 +160,8 @@ udp_input_local_match(struct udp_pcb *pcb, struct netif *inp, u8_t broadcast)
       }
     } else
 #endif /* LWIP_IPV4 */
-    /* Handle IPv4 and IPv6: all, multicast or exact match */
-    if (ip_addr_isany(&pcb->local_ip) ||
-#if LWIP_IPV6_MLD
-       (ip_current_is_v6() && ip6_addr_ismulticast(ip6_current_dest_addr())) ||
-#endif /* LWIP_IPV6_MLD */
-#if LWIP_IGMP
-       (!ip_current_is_v6() && ip4_addr_ismulticast(ip4_current_dest_addr())) ||
-#endif /* LWIP_IGMP */
-       ip_addr_cmp(&pcb->local_ip, ip_current_dest_addr())) {
+    /* Handle IPv4 and IPv6: all or exact match */
+    if (ip_addr_isany(&pcb->local_ip) || ip_addr_cmp(&pcb->local_ip, ip_current_dest_addr())) {
       return 1;
     }
   }
@@ -571,7 +546,12 @@ udp_sendto_chksum(struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *dst_ip,
 #endif /* LWIP_IPV6 || (LWIP_IPV4 && LWIP_MULTICAST_TX_OPTIONS) */
 
   /* find the outgoing network interface for this packet */
-  netif = ip_route(&pcb->local_ip, dst_ip_route);
+  if(IP_IS_ANY_TYPE_VAL(pcb->local_ip)) {
+    /* Don't call ip_route() with IP_ANY_TYPE */
+    netif = ip_route(IP46_ADDR_ANY(IP_GET_TYPE(dst_ip_route)), dst_ip_route);
+  } else {
+    netif = ip_route(&pcb->local_ip, dst_ip_route);
+  }
 
   /* no outgoing network interface could be found? */
   if (netif == NULL) {
@@ -912,7 +892,7 @@ udp_bind(struct udp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
 #endif /* LWIP_IPV4 */
 
   /* still need to check for ipaddr == NULL in IPv6 only case */
-  if ((pcb == NULL) || (ipaddr == NULL) || !IP_ADDR_PCB_VERSION_MATCH_EXACT(pcb, ipaddr)) {
+  if ((pcb == NULL) || (ipaddr == NULL) || !IP_ADDR_PCB_VERSION_MATCH(pcb, ipaddr)) {
     return ERR_VAL;
   }
 
