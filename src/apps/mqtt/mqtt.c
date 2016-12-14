@@ -51,8 +51,6 @@
 #include "lwip/err.h"
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
-
-#include "mqtt_config.h"
 #include "mqtt.h"
 
 /**
@@ -84,12 +82,6 @@
 #define MQTT_REQ_TIMEOUT 30
 #endif
 
-/**
- * Maximum number of pending subscribe, unsubscribe and publish requests .
- */
-#ifndef MQTT_REQ_MAX_IN_FLIGHT
-#define MQTT_REQ_MAX_IN_FLIGHT 4
-#endif
 
 /**
  * Seconds for MQTT connect response timeout after sending connect request

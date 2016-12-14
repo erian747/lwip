@@ -37,14 +37,32 @@
 #ifndef LWIP_HDR_MQTT_CLIENT_H
 #define LWIP_HDR_MQTT_CLIENT_H
 
-#include "mqtt_config.h"
 #include "lwip/err.h"
+#include "lwip/opt.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
+
+/**
+ * Output buffer size
+ */
+#ifndef MQTT_OUTPUT_RINGBUF_SIZE
+#define MQTT_OUTPUT_RINGBUF_SIZE 256
+#endif
+
+/**
+ * Number of bytes in receive buffer
+ */
 #ifndef MQTT_VAR_HEADER_BUFFER_LEN
-  #define MQTT_VAR_HEADER_BUFFER_LEN 128
+#define MQTT_VAR_HEADER_BUFFER_LEN 128
+#endif
+
+/**
+ * Maximum number of pending subscribe, unsubscribe and publish requests .
+ */
+#ifndef MQTT_REQ_MAX_IN_FLIGHT
+#define MQTT_REQ_MAX_IN_FLIGHT 4
 #endif
 
 typedef struct mqtt_client_t mqtt_client_t;
