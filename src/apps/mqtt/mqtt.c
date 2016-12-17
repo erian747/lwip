@@ -622,6 +622,7 @@ pub_ack_rec_rel_response(mqtt_client_t *client, u8_t msg, u16_t pkt_id, u8_t qos
   if(mqtt_output_check_space(&client->output, 2)) {
     mqtt_output_append_fixed_header(&client->output, msg, 0, qos, 0, 2);
     mqtt_output_append_u16(&client->output, pkt_id);
+    mqtt_output_send(&client->output, client->conn);
   } else {
     LWIP_DEBUGF(MQTT_DEBUG_TRACE,("pub_ack_rec_rel_response: OOM creating response: %s with pkt_id: %d\n",
                                   mqtt_msg_type_to_str(msg), pkt_id));
@@ -1042,11 +1043,6 @@ mqtt_publish(mqtt_client_t *client, const char *topic, const void *payload, u16_
 {
   LWIP_ASSERT("mqtt_publish: client != NULL", client);
   LWIP_ASSERT("mqtt_publish: topic != NULL", topic);
-
-  if(client->conn_state == TCP_DISCONNECTED) {
-    LWIP_DEBUGF(MQTT_DEBUG_WARN,("mqtt_publish: Cant not publish in disconnected state\n"));
-    return ERR_CONN;
-  }
   LWIP_ERROR("mqtt_publish: TCP disconnected", (client->conn_state != TCP_DISCONNECTED), return ERR_CONN);
 
   LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_publish: Publish with payload length %d to topic \"%s\"\n", payload_length, topic));
@@ -1091,6 +1087,7 @@ mqtt_publish(mqtt_client_t *client, const char *topic, const void *payload, u16_
   }
 
   mqtt_append_request(&client->pend_req_queue, r);
+  mqtt_output_send(&client->output, client->conn);
   return ERR_OK;
 }
 
@@ -1145,6 +1142,7 @@ err_t mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_re
   }
 
   mqtt_append_request(&client->pend_req_queue, r);
+  mqtt_output_send(&client->output, client->conn);
   return ERR_OK;
 }
 
