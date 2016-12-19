@@ -81,13 +81,13 @@
 #if LWIP_IPV4
 #include "lwip/igmp.h"
 /* IPv4 multicast group 224.0.0.251 */
-static const ip_addr_t v4group = IPADDR4_INIT(PP_HTONL(0xE00000FBUL));
+static const ip_addr_t v4group = DNS_MQUERY_IPV4_GROUP_INIT;
 #endif
 
 #if LWIP_IPV6
 #include "lwip/mld6.h"
 /* IPv6 multicast group FF02::FB */
-static const ip_addr_t v6group = IPADDR6_INIT(PP_HTONL(0xFF020000UL), PP_HTONL(0x00000000UL), PP_HTONL(0x00000000UL), PP_HTONL(0x000000FBUL));
+static const ip_addr_t v6group = DNS_MQUERY_IPV6_GROUP_INIT;
 #endif
 
 #define MDNS_PORT 5353
@@ -1820,6 +1820,7 @@ mdns_resp_init(void)
   mdns_pcb->ttl = MDNS_TTL;
 #endif
   res = udp_bind(mdns_pcb, IP_ANY_TYPE, MDNS_PORT);
+  LWIP_UNUSED_ARG(res); /* in case of LWIP_NOASSERT */
   LWIP_ASSERT("Failed to bind pcb", res == ERR_OK);
   udp_recv(mdns_pcb, mdns_recv, NULL);
 
