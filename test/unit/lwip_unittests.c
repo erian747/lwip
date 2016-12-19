@@ -46,7 +46,6 @@ int main(void)
     etharp_suite,
     dhcp_suite,
     mdns_suite,
-    mqtt_client_suite
   };
   size_t num = sizeof(suites)/sizeof(void*);
   LWIP_ASSERT("No suites defined", num > 0);
