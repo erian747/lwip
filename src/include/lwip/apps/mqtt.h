@@ -45,21 +45,22 @@ extern "C" {
 #endif
 
 /**
- * Output buffer size
+ * Output ring-buffer size, must be able to fit largest outgoing publish message topic+payloads
  */
 #ifndef MQTT_OUTPUT_RINGBUF_SIZE
 #define MQTT_OUTPUT_RINGBUF_SIZE 256
 #endif
 
 /**
- * Number of bytes in receive buffer
+ * Number of bytes in receive buffer, must be at least the size of the longest incoming topic + 8
+ * If one wants to avoid fragmented incoming publish, set length to max incoming topic length + max payload length + 8
  */
 #ifndef MQTT_VAR_HEADER_BUFFER_LEN
 #define MQTT_VAR_HEADER_BUFFER_LEN 128
 #endif
 
 /**
- * Maximum number of pending subscribe, unsubscribe and publish requests .
+ * Maximum number of pending subscribe, unsubscribe and publish requests to server .
  */
 #ifndef MQTT_REQ_MAX_IN_FLIGHT
 #define MQTT_REQ_MAX_IN_FLIGHT 4
@@ -112,18 +113,6 @@ typedef enum
  */
 typedef void (*mqtt_connection_cb_t)(mqtt_client_t *client, void *arg, mqtt_connection_status_t status);
 
-/** Connect to server */
-err_t mqtt_client_connect(mqtt_client_t *client, const char *host, mqtt_connection_cb_t cb, void *arg,
-                   const struct mqtt_connect_client_info_t *client_info);
-
-/** Disconnect server */
-void mqtt_disconnect(mqtt_client_t *client);
-
-/** Create new client */
-mqtt_client_t *mqtt_client_new(void);
-
-/** Check connection status */
-u8_t mqtt_client_is_connected(mqtt_client_t *client);
 
 /** Data callback flags */
 enum {
@@ -156,12 +145,6 @@ typedef void (*mqtt_incoming_data_cb_t)(void *arg, const u8_t *data, u16_t len, 
  */
 typedef void (*mqtt_incoming_publish_cb_t)(void *arg, const char *topic, u32_t tot_len);
 
-/** Set callback to call for incoming publish */
-void mqtt_set_inpub_callback(mqtt_client_t *client, mqtt_incoming_publish_cb_t,
-                             mqtt_incoming_data_cb_t data_cb, void *arg);
-
-
-
 
 /** Function prototype for mqtt request callback. Called when a subscribe, unsubscribe
  * or publish request has completed
@@ -190,24 +173,34 @@ struct mqtt_request_t
   u16_t timeout_diff;
 };
 
+/** MQTT client */
 struct mqtt_client_t
 {
+	/** Timers and timeouts */
 	u16_t cyclic_tick;
-	u8_t conn_state;
-	u16_t pkt_id_seq;
   u16_t keep_alive;
   u16_t server_watchdog;
+	/** Packet identifier generator*/
+	u16_t pkt_id_seq;
+  /** Packet identifier of pending incoming publish */
+  u16_t inpub_pkt_id;
+  /** Connection state */
+  u8_t conn_state;
   struct tcp_pcb *conn;
-  struct mqtt_request_t *pend_req_queue;
+	/** Connection callback */
 	void *connect_arg;
 	mqtt_connection_cb_t connect_cb;
+  /** Pending requests to server */
+  struct mqtt_request_t *pend_req_queue;
   struct mqtt_request_t req_list[MQTT_REQ_MAX_IN_FLIGHT];
 	void *inpub_arg;
+	/** Incoming data callback */
 	mqtt_incoming_data_cb_t data_cb;
   mqtt_incoming_publish_cb_t pub_cb;
+  /** Input */
   u32_t msg_idx;
-  u16_t inpub_pkt_id;
   u8_t rx_buffer[MQTT_VAR_HEADER_BUFFER_LEN];
+	/** Output ring-buffer */
 	struct mqtt_ringbuf_t {
     u16_t put;
     u16_t get;
@@ -216,7 +209,24 @@ struct mqtt_client_t
 };
 
 
+/** Connect to server */
+err_t mqtt_client_connect(mqtt_client_t *client, const char *host, mqtt_connection_cb_t cb, void *arg,
+                   const struct mqtt_connect_client_info_t *client_info);
 
+/** Disconnect from server */
+void mqtt_disconnect(mqtt_client_t *client);
+
+/** Create new client */
+mqtt_client_t *mqtt_client_new(void);
+
+/** Check connection status */
+u8_t mqtt_client_is_connected(mqtt_client_t *client);
+
+/** Set callback to call for incoming publish */
+void mqtt_set_inpub_callback(mqtt_client_t *client, mqtt_incoming_publish_cb_t,
+                             mqtt_incoming_data_cb_t data_cb, void *arg);
+
+/** Common function for subscribe and unsubscribe */
 err_t mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_request_cb_t cb, void *arg, u8_t sub);
 
 /** Subscribe to topic */
@@ -225,7 +235,7 @@ err_t mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_re
 #define mqtt_unsubscribe(client, topic, cb, arg) mqtt_sub_unsub(client, topic, 0, cb, arg, 0)
 
 
-/** Publish data */
+/** Publish data to topic */
 err_t mqtt_publish(mqtt_client_t *client, const char *topic, const void *payload, u16_t payload_length, u8_t qos, u8_t retain,
                                     mqtt_request_cb_t cb, void *arg);
 

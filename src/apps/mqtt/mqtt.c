@@ -126,6 +126,7 @@ enum mqtt_message_type {
 /** Helpers to extract control packet type and qos from first byte in fixed header */
 #define MQTT_CTL_PACKET_TYPE(fixed_hdr_byte0) ((fixed_hdr_byte0 & 0xf0) >> 4)
 #define MQTT_CTL_PACKET_QOS(fixed_hdr_byte0) ((fixed_hdr_byte0 & 0x6) >> 1)
+
 /**
  * MQTT connect flags, only used in CONNECT message
  */
@@ -208,6 +209,7 @@ msg_generate_packet_id(mqtt_client_t *client)
 /** Return number of bytes possible to read without wrapping around */
 #define mqtt_ringbuf_linear_read_length(rb) LWIP_MIN(mqtt_ringbuf_len(rb), (MQTT_OUTPUT_RINGBUF_SIZE - ((rb)->get & MQTT_RINGBUF_IDX_MASK)))
 
+/** Return pointer to ring buffer get position */
 #define mqtt_ringbuf_get_ptr(rb) (&(rb)->buf[(rb)->get & MQTT_RINGBUF_IDX_MASK])
 
 #define mqtt_ringbuf_advance_get_idx(rb, len) ((rb)->get += (len))
@@ -227,9 +229,9 @@ mqtt_output_send(struct mqtt_ringbuf_t *rb, struct tcp_pcb *tpcb)
   u16_t ringbuf_lin_len = mqtt_ringbuf_linear_read_length(rb);
   u16_t send_len = tcp_sndbuf(tpcb);
 
-  send_len = tcp_sndbuf(tpcb);
-  if(send_len == 0 || ringbuf_lin_len == 0)
+  if(send_len == 0 || ringbuf_lin_len == 0) {
     return;
+  }
 
   LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_output_send: tcp_sndbuf: %d bytes, ringbuf_linear_available: %d, get %d, put %d\n",
                                 send_len, ringbuf_lin_len, ((rb)->get & MQTT_RINGBUF_IDX_MASK), ((rb)->put & MQTT_RINGBUF_IDX_MASK)));
@@ -266,7 +268,7 @@ mqtt_output_send(struct mqtt_ringbuf_t *rb, struct tcp_pcb *tpcb)
  * Create request item
  * @param r_objs Pointer to request objects
  * @param pkt_id Packet identifier of request
- * @param cb Packet Callback to call when requests lifetime ends
+ * @param cb Packet callback to call when requests lifetime ends
  * @param arg Parameter following callback
  * @return Request or NULL if failed to create
  */
@@ -519,7 +521,8 @@ mqtt_output_check_space(struct mqtt_ringbuf_t *rb, u16_t r_length)
  * @param client MQTT client
  * @param reason Reason for disconnection
  */
-static void mqtt_close(mqtt_client_t *client, mqtt_connection_status_t reason)
+static void
+mqtt_close(mqtt_client_t *client, mqtt_connection_status_t reason)
 {
   LWIP_ASSERT("mqtt_close: client != NULL", client != NULL);
 
@@ -541,7 +544,7 @@ static void mqtt_close(mqtt_client_t *client, mqtt_connection_status_t reason)
   /* Stop cyclic timer */
   sys_untimeout(mqtt_cyclic_timer, client);
 
-  /* Notify upper layer of disconnection if changed state*/
+  /* Notify upper layer of disconnection if changed state */
   if(client->conn_state != TCP_DISCONNECTED) {
 
     client->conn_state = TCP_DISCONNECTED;
@@ -645,21 +648,13 @@ mqtt_incomming_suback(struct mqtt_request_t *r, u8_t result)
   }
 }
 
-#if 0
-
-/*get topic and topic length and packet id, send response for qos > 0 invoke publish start callback */
-static u16_t mqtt_incoming_publish(mqtt_client_t *client, uint8_t *var_hdr_payload, u32_t remaining_len, u8_t qos)
-{
-
-}
-
-#endif
 
 /**
  * Complete MQTT message received or buffer full
  * @param client MQTT client
  * @param var_hdr_payload Pointer to beginning of variable headers and optional payload
- * @param length length of var_hdr_payload
+ * @param length length received part
+ * @param remaining_length Remaining length of complete message
  */
 static mqtt_connection_status_t
 mqtt_message_received(mqtt_client_t *client, u8_t fixed_hdr_idx, u16_t length, u32_t remaining_length)
@@ -704,7 +699,7 @@ mqtt_message_received(mqtt_client_t *client, u8_t fixed_hdr_idx, u16_t length, u
 
       uint8_t *topic = var_hdr_payload + 2;
       uint16_t after_topic = 2 + topic_len;
-      /* Check length, add one byte even for QoS 0 so tht zero termination will fit */
+      /* Check length, add one byte even for QoS 0 so that zero termination will fit */
       if((after_topic + qos ? 2 : 1) > length) {
         LWIP_DEBUGF(MQTT_DEBUG_WARN,("mqtt_message_received: Receive buffer can not fit topic + pkt_id\n"));
         goto out_disconnect;
@@ -732,7 +727,6 @@ mqtt_message_received(mqtt_client_t *client, u8_t fixed_hdr_idx, u16_t length, u
       }
       /* Restore byte after topic */
       topic[topic_len] = bkp;
-
     }
     if(payload_length > 0 || remaining_length == 0) {
       client->data_cb(client->inpub_arg, var_hdr_payload + payload_offset, payload_length, remaining_length == 0 ? MQTT_DATA_FLAG_LAST : 0);
@@ -798,7 +792,7 @@ out_disconnect:
  * @return Connection status
  */
 static mqtt_connection_status_t
-mqtt_parse_incomming(mqtt_client_t *client, struct pbuf *p)
+mqtt_parse_incoming(mqtt_client_t *client, struct pbuf *p)
 {
   u16_t in_offset = 0;
   u32_t msg_rem_len = 0;
@@ -819,7 +813,7 @@ mqtt_parse_incomming(mqtt_client_t *client, struct pbuf *p)
       if(fixed_hdr_idx >= 2) {
         msg_rem_len |= (u32_t)(b & 0x7f) << ((fixed_hdr_idx - 2) * 7);
         if((b & 0x80) == 0) {
-          LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_parse_incomming: Remaining length after fixed header: %d\n", msg_rem_len));
+          LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_parse_incoming: Remaining length after fixed header: %d\n", msg_rem_len));
           if(msg_rem_len == 0) {
             /* Complete message with no extra headers of payload received */
             mqtt_message_received(client, fixed_hdr_idx, 0, 0);
@@ -851,7 +845,7 @@ mqtt_parse_incomming(mqtt_client_t *client, struct pbuf *p)
       in_offset += cpy_len;
       msg_rem_len -= cpy_len;
 
-      LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_parse_incomming: msg_idx: %d, cpy_len: %d, remaining %d\n", client->msg_idx, cpy_len, msg_rem_len));
+      LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_parse_incoming: msg_idx: %d, cpy_len: %d, remaining %d\n", client->msg_idx, cpy_len, msg_rem_len));
       if(msg_rem_len == 0 || cpy_len == buffer_space) {
         /* Whole message received or buffer is full */
         mqtt_connection_status_t res = mqtt_message_received(client, fixed_hdr_idx, (cpy_start + cpy_len) - fixed_hdr_idx, msg_rem_len);
@@ -871,13 +865,12 @@ mqtt_parse_incomming(mqtt_client_t *client, struct pbuf *p)
 }
 
 
-
 /**
  * TCP received callback function. @see tcp_recv_fn
  * @param arg MQTT client
  * @param p PBUF chain of received data
  * @param err Passed as return value if not ERR_OK
- * @return ERR_OK or err
+ * @return ERR_OK or err passed into callback
  */
 static err_t
 mqtt_tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
@@ -898,7 +891,7 @@ mqtt_tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 
     /* Tell remote that data has been received */
     tcp_recved(pcb, p->tot_len);
-    mqtt_connection_status_t res = mqtt_parse_incomming(client, p);
+    mqtt_connection_status_t res = mqtt_parse_incoming(client, p);
     pbuf_free(p);
 
     if(res != MQTT_CONNECT_ACCEPTED) {
@@ -967,8 +960,9 @@ mqtt_tcp_err_cb(void *arg, err_t err)
 }
 /**
  * TCP poll callback function. @see tcp_poll_fn
- * @param  arg MQTT client
- * @param  tpcb TCP connection handle
+ * @param arg MQTT client
+ * @param tpcb TCP connection handle
+ * @return err ERR_OK
  */
 static err_t
 mqtt_tcp_poll_cb(void *arg, struct tcp_pcb *tpcb)
@@ -1102,7 +1096,8 @@ mqtt_publish(mqtt_client_t *client, const char *topic, const void *payload, u16_
  * @param sub 1 for subscribe, 0 for unsubscribe
  * @return ERR_OK if successful, @see err_t enum for other results
  */
-err_t mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_request_cb_t cb, void *arg, u8_t sub)
+err_t
+mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_request_cb_t cb, void *arg, u8_t sub)
 {
   LWIP_ASSERT("mqtt_sub_unsub: client != NULL", client);
   LWIP_ASSERT("mqtt_sub_unsub: topic != NULL", topic);
@@ -1127,9 +1122,7 @@ err_t mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_re
     return ERR_MEM;
   }
 
-
   LWIP_DEBUGF(MQTT_DEBUG_TRACE,("mqtt_sub_unsub: Client (un)subscribe to topic \"%s\", id: %d\n", topic, pkt_id));
-
 
   mqtt_output_append_fixed_header(&client->output, sub ? MQTT_MSG_TYPE_SUBSCRIBE : MQTT_MSG_TYPE_UNSUBSCRIBE, 0, 1, 0, remaining_length);
   /* Packet id */
@@ -1154,7 +1147,8 @@ err_t mqtt_sub_unsub(mqtt_client_t *client, const char *topic, u8_t qos, mqtt_re
  * @param data_cb Callback for each fragment of payload that arrives
  * @param arg User supplied argument to both callbacks
  */
-void mqtt_set_inpub_callback(mqtt_client_t *client, mqtt_incoming_publish_cb_t pub_cb,
+void
+mqtt_set_inpub_callback(mqtt_client_t *client, mqtt_incoming_publish_cb_t pub_cb,
                              mqtt_incoming_data_cb_t data_cb, void *arg)
 {
   LWIP_ASSERT("mqtt_set_inpub_callback: client != NULL", client != NULL);
